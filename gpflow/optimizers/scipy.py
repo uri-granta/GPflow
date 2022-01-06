@@ -37,7 +37,6 @@ class Scipy:
         method: Optional[str] = "L-BFGS-B",
         step_callback: Optional[StepCallback] = None,
         compile: bool = True,
-        allow_unused_variables: bool = False,
         **scipy_kwargs,
     ) -> OptimizeResult:
         """
@@ -61,8 +60,6 @@ class Scipy:
             compile: If True, wraps the evaluation function (the passed `closure`
                 as well as its gradient computation) inside a `tf.function()`,
                 which will improve optimization speed in most cases.
-            allow_unused_variables: Whether to allow variables that are not
-                actually used in the closure.
             scipy_kwargs: Arguments passed through to `scipy.optimize.minimize`
                 Note that Scipy's minimize() takes a `callback` argument, but
                 you probably want to use our wrapper and pass in `step_callback`.
@@ -82,9 +79,7 @@ class Scipy:
             )  # pragma: no cover
         initial_params = self.initial_parameters(variables)
 
-        func = self.eval_func(
-            closure, variables, compile=compile, allow_unused_variables=allow_unused_variables
-        )
+        func = self.eval_func(closure, variables, compile=compile)
         if step_callback is not None:
             if "callback" in scipy_kwargs:
                 raise ValueError("Callback passed both via `step_callback` and `callback`")
@@ -106,26 +101,21 @@ class Scipy:
         closure: LossClosure,
         variables: Sequence[tf.Variable],
         compile: bool = True,
-        allow_unused_variables: bool = False,
     ) -> Callable[[np.ndarray], Tuple[np.ndarray, np.ndarray]]:
-        first_call = True
-
         def _tf_eval(x: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
-            nonlocal first_call
-
             values = cls.unpack_tensors(variables, x)
             cls.assign_tensors(variables, values)
 
-            if first_call:
-                # Only check for unconnected gradients on the first function evaluation.
-                loss, grads = _compute_loss_and_gradients(
-                    closure, variables, tf.UnconnectedGradients.NONE
-                )
-                grads = cls._filter_unused_variables(variables, grads, allow_unused_variables)
-                first_call = False
-            else:
-                loss, grads = _compute_loss_and_gradients(
-                    closure, variables, tf.UnconnectedGradients.ZERO
+            loss, grads = _compute_loss_and_gradients(
+                closure, variables, tf.UnconnectedGradients.NONE
+            )
+
+            # Detect unused variables:
+            unused_variables = [variables[i].name for i, grad in enumerate(grads) if grad is None]
+            if unused_variables:
+                raise ValueError(
+                    "Some variables does not have a gradient, and appear unused in / not connected"
+                    f" to the loss closure: {unused_variables}."
                 )
 
             return loss, cls.pack_tensors(grads)
@@ -138,32 +128,6 @@ class Scipy:
             return loss.numpy().astype(np.float64), grad.numpy().astype(np.float64)
 
         return _eval
-
-    @staticmethod
-    def _filter_unused_variables(
-        variables: Sequence[tf.Variable], grads: Sequence[tf.Tensor], allow_unused_variables: bool
-    ) -> Sequence[tf.Tensor]:
-        filtered_grads = []
-        unused_variables = []
-        for i, grad in enumerate(grads):
-            if grad is None:
-                variable = variables[i]
-                filtered_grads.append(tf.zeros_like(variable))
-                unused_variables.append(variable.name)
-            else:
-                filtered_grads.append(grad)
-
-        if unused_variables:
-            msg = (
-                "Some variables does not have a gradient, and appear unused in / not connected to"
-                f" the loss closure: {unused_variables}."
-            )
-            if allow_unused_variables:
-                warnings.warn(msg)
-            else:
-                raise ValueError(msg)
-
-        return filtered_grads
 
     @classmethod
     def callback_func(

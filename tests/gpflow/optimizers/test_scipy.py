@@ -122,8 +122,7 @@ def test_scipy__partially_disconnected_variable(compile: bool) -> None:
 
 
 @pytest.mark.parametrize("compile", [True, False])
-@pytest.mark.parametrize("allow_unused_variables", [True, False])
-def test_scipy__disconnected_variable(compile: bool, allow_unused_variables: bool) -> None:
+def test_scipy__disconnected_variable(compile: bool) -> None:
     target1 = [0.2, 0.8]
     v1 = tf.Variable([0.5, 0.5], dtype=default_float(), name="v1")
     v2 = tf.Variable([0.5], dtype=default_float(), name="v2")
@@ -134,21 +133,5 @@ def test_scipy__disconnected_variable(compile: bool, allow_unused_variables: boo
 
     opt = gpflow.optimizers.Scipy()
 
-    if allow_unused_variables:
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            result = opt.minimize(
-                f, [v1, v2], compile=compile, allow_unused_variables=allow_unused_variables
-            )
-
-        (warning,) = w
-        msg = warning.message.args[0]
-        assert v2.name in msg
-
-        assert result.success
-        np.testing.assert_allclose(target1 + [0.5], result.x)
-        np.testing.assert_allclose(target1, v1)
-        np.testing.assert_allclose([0.5], v2)
-    else:
-        with pytest.raises(ValueError, match=v2.name):
-            opt.minimize(f, [v1, v2], allow_unused_variables=allow_unused_variables)
+    with pytest.raises(ValueError, match=v2.name):
+        opt.minimize(f, [v1, v2])
