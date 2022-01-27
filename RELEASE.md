@@ -41,10 +41,10 @@ This release contains contributions from:
 
 * Slight change to the API of custom posterior objects.
   `gpflow.posteriors.AbstractPosterior._precompute` no longer must return an `alpha` and an `Qinv`
-  - instead it returns any arbitrary tuple of tensors.
+  - instead it returns any arbitrary tuple of `PrecomputedValue`s.
   Correspondingly `gpflow.posteriors.AbstractPosterior._conditional_with_precompute` should no
   longer try to access `self.alpha` and `self.Qinv`, but instead is passed the tuple of tensors
-  returned by `_precompute`, as a parameter. (#1763)
+  returned by `_precompute`, as a parameter. (#1763, #1767)
 * Slight change to the API of inducing points.
   You should no longer override `gpflow.inducing_variables.InducingVariables.__len__`. Override
   `gpflow.inducing_variables.InducingVariables.num_inducing` instead. `num_inducing` should return a
@@ -61,6 +61,8 @@ This release contains contributions from:
 ## Major Features and Improvements
 
 * Add new posterior class to enable faster predictions from the VGP model. (#1761)
+* All posterior classes bug-fixed to work with variable data sizes, for Bayesian Optimisation.
+  (#1767)
 * VGP class bug-fixed to work with variable-sized data. Note you will have to call
   `model.after_data_changed` whenever your data has changed. (#1774).
 
