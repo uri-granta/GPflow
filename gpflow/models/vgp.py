@@ -20,14 +20,14 @@ import tensorflow as tf
 import gpflow
 
 from .. import posteriors
-from ..base import InputData, MeanAndVariance, Parameter, RegressionData
+from ..base import InputData, MeanAndVariance, Parameter, RegressionData, TensorType
 from ..conditionals import conditional
 from ..config import default_float, default_jitter
 from ..kernels import Kernel
 from ..kullback_leiblers import gauss_kl
 from ..likelihoods import Likelihood
 from ..mean_functions import MeanFunction
-from ..utilities import triangular
+from ..utilities import is_variable, triangular, triangular_size
 from .model import GPModel
 from .training_mixins import InternalDataTrainingLossMixin
 from .util import data_input_to_tensor
@@ -70,12 +70,67 @@ class VGP_deprecated(GPModel, InternalDataTrainingLossMixin):
 
         self.data = data_input_to_tensor(data)
         X_data, Y_data = self.data
-        num_data = X_data.shape[0]
-        self.num_data = num_data
 
-        self.q_mu = Parameter(np.zeros((num_data, self.num_latent_gps)))
-        q_sqrt = np.array([np.eye(num_data) for _ in range(self.num_latent_gps)])
-        self.q_sqrt = Parameter(q_sqrt, transform=triangular())
+        # If the input data is variable, then the user probably intends to mutate it, and then we'll
+        # need a copy to keep consistency between it and the `self.q_*` variables.
+        def copy_if_variable(t: TensorType) -> TensorType:
+            if is_variable(t):
+                return Parameter(t, shape=t.shape, trainable=False)
+            return t
+
+        self.internal_data = (
+            copy_if_variable(X_data),
+            copy_if_variable(Y_data),
+        )
+
+        static_num_data = X_data.shape[0]
+        if static_num_data is None:
+            self.num_data = Parameter(
+                tf.shape(X_data)[0], shape=[], dtype=tf.int32, trainable=False
+            )
+            q_sqrt_transformed_shape = (self.num_latent_gps, None)
+        else:
+            self.num_data = tf.constant(static_num_data)
+            q_sqrt_transformed_shape = (self.num_latent_gps, triangular_size(self.num_data))
+        # Many functions below don't like `Parameter`s:
+        dynamic_num_data = tf.convert_to_tensor(self.num_data)
+
+        self.q_mu = Parameter(
+            tf.zeros((dynamic_num_data, self.num_latent_gps)),
+            shape=(static_num_data, num_latent_gps),
+        )
+        q_sqrt = tf.eye(dynamic_num_data, batch_shape=[self.num_latent_gps])
+        self.q_sqrt = Parameter(
+            q_sqrt,
+            transform=triangular(),
+            pretransformed_shape=(num_latent_gps, static_num_data, static_num_data),
+            transformed_shape=q_sqrt_transformed_shape,
+        )
+
+    def after_data_changed(self) -> None:
+        new_X_data, new_Y_data = self.data
+        new_num_data = tf.shape(new_X_data)[0]
+        f_mu, f_cov = self.predict_f(new_X_data, full_cov=True)  # [N, L], [L, N, N]
+
+        # This model is hard-coded to use the whitened representation, i.e.  q_mu and q_sqrt
+        # parametrize q(v), and u = f(X) = L v, where L = cholesky(K(X, X)) Hence we need to
+        # back-transform from f_mu and f_cov to obtain the updated new_q_mu and new_q_sqrt:
+        Knn = self.kernel(new_X_data, full_cov=True)  # [N, N]
+        jitter_mat = default_jitter() * tf.eye(new_num_data, dtype=Knn.dtype)
+        Lnn = tf.linalg.cholesky(Knn + jitter_mat)  # [N, N]
+        new_q_mu = tf.linalg.triangular_solve(Lnn, f_mu)  # [N, L]
+        tmp = tf.linalg.triangular_solve(Lnn[None], f_cov)  # [L, N, N], L⁻¹ f_cov
+        S_v = tf.linalg.triangular_solve(Lnn[None], tf.linalg.matrix_transpose(tmp))  # [L, N, N]
+        new_q_sqrt = tf.linalg.cholesky(S_v + jitter_mat)  # [L, N, N]
+
+        old_X_data, old_Y_data = self.internal_data
+        if is_variable(old_X_data):
+            old_X_data.assign(new_X_data)
+        if is_variable(old_Y_data):
+            old_Y_data.assign(new_Y_data)
+        self.num_data.assign(new_num_data)
+        self.q_mu.assign(new_q_mu)
+        self.q_sqrt.assign(new_q_sqrt)
 
     def maximum_log_likelihood_objective(self) -> tf.Tensor:
         return self.elbo()
@@ -92,12 +147,14 @@ class VGP_deprecated(GPModel, InternalDataTrainingLossMixin):
             q(\mathbf f) = N(\mathbf f \,|\, \boldsymbol \mu, \boldsymbol \Sigma)
 
         """
-        X_data, Y_data = self.data
+        X_data, Y_data = self.internal_data
+        num_data = tf.convert_to_tensor(self.num_data)
+
         # Get prior KL.
         KL = gauss_kl(self.q_mu, self.q_sqrt)
 
         # Get conditionals
-        K = self.kernel(X_data) + tf.eye(self.num_data, dtype=default_float()) * default_jitter()
+        K = self.kernel(X_data) + tf.eye(num_data, dtype=default_float()) * default_jitter()
         L = tf.linalg.cholesky(K)
         fmean = tf.linalg.matmul(L, self.q_mu) + self.mean_function(X_data)  # [NN, ND] -> ND
         q_sqrt_dnn = tf.linalg.band_part(self.q_sqrt, -1, 0)  # [D, N, N]
@@ -115,7 +172,7 @@ class VGP_deprecated(GPModel, InternalDataTrainingLossMixin):
     def predict_f(
         self, Xnew: InputData, full_cov: bool = False, full_output_cov: bool = False
     ) -> MeanAndVariance:
-        X_data, _ = self.data
+        X_data, _Y_data = self.internal_data
         mu, var = conditional(
             Xnew,
             X_data,
@@ -153,10 +210,10 @@ class VGP_with_posterior(VGP_deprecated):
           computations when you only want to call the posterior's
           `fused_predict_f` method.
         """
-        X, _ = self.data
+        X_data, _Y_data = self.internal_data
         return posteriors.VGPPosterior(
             self.kernel,
-            X,
+            X_data,
             self.q_mu,
             self.q_sqrt,
             mean_function=self.mean_function,

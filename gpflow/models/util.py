@@ -20,7 +20,7 @@ import tensorflow as tf
 from ..config import default_float
 from ..inducing_variables import InducingPoints, InducingVariables
 from .model import BayesianModel
-from .training_mixins import Data, ExternalDataTrainingLossMixin
+from .training_mixins import Data, ExternalDataTrainingLossMixin, InternalDataTrainingLossMixin
 
 
 def inducingpoint_wrapper(
@@ -67,6 +67,15 @@ def maximum_log_likelihood_objective(model: BayesianModel, data: Data) -> tf.Ten
     else:
         _assert_equal_data(model.data, data)
         return model.maximum_log_likelihood_objective()
+
+
+def after_data_changed(model: BayesianModel) -> None:
+    """
+    If the initial data passed to the model were `tf.Variable`s, call this after the values
+    have changed so that the model can refresh intermediate values it may have cached.
+    """
+    if isinstance(model, InternalDataTrainingLossMixin):
+        model.after_data_changed()
 
 
 def data_input_to_tensor(structure):
