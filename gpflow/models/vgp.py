@@ -88,10 +88,10 @@ class VGP_deprecated(GPModel, InternalDataTrainingLossMixin):
             self.num_data = Parameter(
                 tf.shape(X_data)[0], shape=[], dtype=tf.int32, trainable=False
             )
-            q_sqrt_transformed_shape = (self.num_latent_gps, None)
+            q_sqrt_pretransformed_shape = (self.num_latent_gps, None)
         else:
             self.num_data = tf.constant(static_num_data)
-            q_sqrt_transformed_shape = (self.num_latent_gps, triangular_size(self.num_data))
+            q_sqrt_pretransformed_shape = (self.num_latent_gps, triangular_size(self.num_data))
         # Many functions below don't like `Parameter`s:
         dynamic_num_data = tf.convert_to_tensor(self.num_data)
 
@@ -103,8 +103,8 @@ class VGP_deprecated(GPModel, InternalDataTrainingLossMixin):
         self.q_sqrt = Parameter(
             q_sqrt,
             transform=triangular(),
-            pretransformed_shape=(num_latent_gps, static_num_data, static_num_data),
-            transformed_shape=q_sqrt_transformed_shape,
+            pretransformed_shape=q_sqrt_pretransformed_shape,
+            transformed_shape=(num_latent_gps, static_num_data, static_num_data),
         )
 
     def after_data_changed(self) -> None:

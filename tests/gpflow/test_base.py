@@ -235,8 +235,8 @@ def test_construct_parameter_with_variable_shape__different_transformed_shape() 
     parameter = gpflow.Parameter(
         [[1, 0], [2, 3]],
         transform=triangular(),
-        pretransformed_shape=[None, None],
-        transformed_shape=[None],
+        pretransformed_shape=[None],
+        transformed_shape=[None, None],
     )
 
     values = [

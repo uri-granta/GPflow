@@ -162,13 +162,13 @@ class Parameter(tfp.util.TransformedVariable):
             dtype=value.dtype,
             trainable=trainable,
             name=name,
-            shape=transformed_shape,
+            shape=pretransformed_shape,
         )
 
         # TransformedVariable.__init__ doesn't allow us to pass a pre-transformed shape, so we
         # manually override it.
-        if pretransformed_shape is not None:
-            self._shape = tf.TensorShape(pretransformed_shape)
+        if transformed_shape is not None:
+            self._shape = tf.TensorShape(transformed_shape)
 
         self.prior: Optional[Prior] = prior
         self.prior_on = prior_on  # type: ignore  # see https://github.com/python/mypy/issues/3004
