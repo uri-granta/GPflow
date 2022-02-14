@@ -69,13 +69,13 @@ def maximum_log_likelihood_objective(model: BayesianModel, data: Data) -> tf.Ten
         return model.maximum_log_likelihood_objective()
 
 
-def after_data_changed(model: BayesianModel) -> None:
+def on_data_change(model: BayesianModel) -> None:
     """
     If the initial data passed to the model were `tf.Variable`s, call this after the values
     have changed so that the model can refresh intermediate values it may have cached.
     """
     if isinstance(model, InternalDataTrainingLossMixin):
-        model.after_data_changed()
+        model.on_data_change()
 
 
 def data_input_to_tensor(structure):

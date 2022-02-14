@@ -20,7 +20,7 @@ from gpflow.models import (
     ExternalDataTrainingLossMixin,
     GPModel,
     InternalDataTrainingLossMixin,
-    after_data_changed,
+    on_data_change,
 )
 
 
@@ -32,10 +32,10 @@ from gpflow.models import (
         (ExternalDataTrainingLossMixin, False),
     ],
 )
-def test_after_data_changed(model_class: Type[GPModel], call_expected: bool) -> None:
+def test_on_data_change(model_class: Type[GPModel], call_expected: bool) -> None:
     model = MagicMock(model_class)
-    after_data_changed(model)
+    on_data_change(model)
     if call_expected:
-        assert 1 == model.after_data_changed.call_count
+        assert 1 == model.on_data_change.call_count
     else:
-        assert not hasattr(model_class, "after_data_changed")
+        assert not hasattr(model_class, "on_data_change")

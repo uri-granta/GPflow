@@ -72,11 +72,12 @@ class InternalDataTrainingLossMixin:
             return tf.function(self.training_loss)
         return self.training_loss
 
-    def after_data_changed(self) -> None:
+    def on_data_change(self) -> None:
         """
         If the initial data passed to the model were `tf.Variable`s, call this after the values
         have changed so that the model can refresh intermediate values it may have cached.
         """
+        pass  # pragma: no cover
 
 
 class ExternalDataTrainingLossMixin:

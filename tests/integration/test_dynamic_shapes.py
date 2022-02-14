@@ -61,7 +61,7 @@ def test_vgp(whiten, q_diag):
 
     X.assign(Datum.X)
     Y.assign(Datum.Y)
-    model.after_data_changed()
+    model.on_data_change()
 
     opt = gpflow.optimizers.Scipy()
 
@@ -132,7 +132,7 @@ def test_vgp_multiclass():
 
     X.assign(Datum.X)
     Yc.assign(Datum.Yc)
-    model.after_data_changed()
+    model.on_data_change()
 
     opt = gpflow.optimizers.Scipy()
 

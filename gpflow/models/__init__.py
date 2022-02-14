@@ -8,8 +8,8 @@ from .sgpr import GPRFITC, SGPR
 from .svgp import SVGP
 from .training_mixins import ExternalDataTrainingLossMixin, InternalDataTrainingLossMixin
 from .util import (
-    after_data_changed,
     maximum_log_likelihood_objective,
+    on_data_change,
     training_loss,
     training_loss_closure,
 )

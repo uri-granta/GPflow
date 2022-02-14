@@ -107,7 +107,7 @@ class VGP_deprecated(GPModel, InternalDataTrainingLossMixin):
             transformed_shape=(num_latent_gps, static_num_data, static_num_data),
         )
 
-    def after_data_changed(self) -> None:
+    def on_data_change(self) -> None:
         new_X_data, new_Y_data = self.data
         new_num_data = tf.shape(new_X_data)[0]
         f_mu, f_cov = self.predict_f(new_X_data, full_cov=True)  # [N, L], [L, N, N]
