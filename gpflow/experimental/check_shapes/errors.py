@@ -65,11 +65,15 @@ class ShapeMismatchError(Exception):
             f"    Declared: {func_info.path_and_line}",
         ]
         for spec in specs:
-            actual_shape = spec.argument_ref.get(func, arg_map).shape
-            if isinstance(actual_shape, tf.TensorShape) and actual_shape.rank is None:
-                actual_str = "<Unknown>"
+            arg_value = spec.argument_ref.get(func, arg_map)
+            if arg_value is None:
+                actual_str = "<Tensor is None>"
             else:
-                actual_str = f"({', '.join(str(dim) for dim in actual_shape)})"
+                actual_shape = arg_value.shape
+                if isinstance(actual_shape, tf.TensorShape) and actual_shape.rank is None:
+                    actual_str = "<Unknown>"
+                else:
+                    actual_str = f"({', '.join(str(dim) for dim in actual_shape)})"
             lines.append(
                 f"    Argument: {spec.argument_ref}, expected: {spec.shape}, actual: {actual_str}"
             )

@@ -90,7 +90,10 @@ def _assert_shapes(
             raise ShapeMismatchError(func, print_specs, arg_map)
 
     for arg_spec in check_specs:
-        actual_shape = arg_spec.argument_ref.get(func, arg_map).shape
+        arg_value = arg_spec.argument_ref.get(func, arg_map)
+        if arg_value is None:
+            continue
+        actual_shape = arg_value.shape
         if isinstance(actual_shape, tf.TensorShape) and actual_shape.rank is None:
             continue
 
